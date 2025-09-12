@@ -5,12 +5,14 @@ import (
 	"github.com/sourcegraph/jsonrpc2"
 
 	"context"
+	"encoding/json"
 	"flag"
 	"io"
 	"log"
 	"net/http"
 	// "net/rpc"
 	"os"
+	"time"
 )
 
 var (
@@ -38,11 +40,87 @@ func (c stdioReadWriteCloser) Close() error {
 	return nil
 }
 
-func handle(_ context.Context, _ *jsonrpc2.Conn, req *jsonrpc2.Request) (result interface{}, err error) {
-	// test with:
-	// echo 'Content-Length: 70\r\n\r\n{"jsonrpc": "2.0", "method": "subtract", "params": [42, 23], "id": 1}' | ./minimcp
-	log.Printf("request: %+v", req)
-	return struct{ A string }{A: "abc"}, nil
+// via https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle
+type initializeParams struct { // TODO: generate from schema.json
+	// JSONRPCVersion string `json:"jsonrpc"` // mandatory
+	// ID             string `json:"id"`      // mandatory in mcp
+	// Method         string `json:"method"` // mandatory
+	// Params:
+	ProtocolVersion string `json:"protocolVersion"`
+	Capabilities    struct {
+		Roots map[string]bool `json:"roots"`
+	} `json:"capabilities"`
+	Sampling    map[string]interface{} `json:"sampling"`    // ?
+	Elicitation map[string]interface{} `json:"elicitation"` // ?
+	ClientInfo  peerInfo               `json:"clientInfo"`
+}
+
+type initializeResultFlags struct {
+	Subscribe   bool `json:"subscribe,omitempty"`
+	ListChanged bool `json:"listChanged,omitempty"`
+}
+
+type initializeResultCaps struct {
+	Logging   map[string]bool       `json:"logging"`
+	Prompts   initializeResultFlags `json:"prompts"`
+	Resources initializeResultFlags `json:"resources"`
+	Tools     initializeResultFlags `json:"tools"`
+}
+
+type peerInfo struct {
+	Name    string `json:"name"`
+	Title   string `json:"title"`
+	Version string `json:"version"`
+}
+
+// via https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle
+type initializeResult struct { // TODO: really, really should be generated from schema
+	ProtocolVersion string               `json:"protocolVersion"`
+	Capabilities    initializeResultCaps `json:"capabilities"`
+	ServerInfo      peerInfo             `json:"serverInfo"`
+	Instructions    string               `json:"instructions,omitempty"`
+}
+
+func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result interface{}, err error) {
+	log.Printf("request: %+v", r)
+	switch r.Method {
+	case "initialize":
+		// decode params according to iniitalizeParams
+		//if err := c.Reply(ctx, r.ID, "test") { // this is if func (h *handler) Handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) { }; or func (h *MyHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) (result interface{}, err error) { might be the right signature, need to verify
+
+		params := initializeParams{}
+		if err := json.Unmarshal(*r.Params, &params); err != nil {
+			// If unmarshaling fails, the params were invalid.
+			log.Printf("Failed to unmarshal params: %v", err)
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams, Message: "invalid params"}
+		}
+		log.Printf("conn from %+v", params.ClientInfo)
+
+		go func() {
+			time.Sleep(1 * time.Second)
+			// TODO: ctx might be invalid, c might be unusable...
+			ctx := context.TODO() // add a time block ...
+			c.Notify(ctx, "notification/initialized", nil)
+		}()
+
+		return initializeResult{
+			ProtocolVersion: "2024-11-05",
+			Capabilities: initializeResultCaps{
+				Logging:   map[string]bool{},
+				Prompts:   initializeResultFlags{},
+				Resources: initializeResultFlags{},
+				Tools:     initializeResultFlags{},
+			},
+			ServerInfo: peerInfo{
+				Name:    "MiniMCP",
+				Title:   "MiniMCP Display Name",
+				Version: "0.0.1",
+			},
+		}, nil
+	default:
+		//return struct{ A string }{A: "abc"}, nil
+		return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeMethodNotFound, Message: "method not found"}
+	}
 }
 
 func runConn(ctx context.Context, rwc io.ReadWriteCloser) {
