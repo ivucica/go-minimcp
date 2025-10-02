@@ -6,6 +6,7 @@ go 1.16
 // toolchain go1.23.3
 
 require (
+	github.com/golang/glog v1.2.5 // indirect
 	// github.com/hashicorp/go-multierror v1.1.1
 	// github.com/sourcegraph/go-lsp v0.0.0-20240223163137-f80c5dd31dfd
 	github.com/sourcegraph/jsonrpc2 v0.2.0

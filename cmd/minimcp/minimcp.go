@@ -2,13 +2,13 @@ package main
 
 import (
 	// TODO: add badc0de.net/pkg/flagutil and invoke its Parse in init()
+	"github.com/golang/glog"
 	"github.com/sourcegraph/jsonrpc2"
 
 	"context"
 	"encoding/json"
 	"flag"
 	"io"
-	"log"
 	"net/http"
 	// "net/rpc"
 	"os"
@@ -82,7 +82,8 @@ type initializeResult struct { // TODO: really, really should be generated from 
 }
 
 func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result interface{}, err error) {
-	log.Printf("request: %+v", r)
+	glog.Infof("request: %+v", r)
+	glog.Flush()
 	switch r.Method {
 	case "initialize":
 		// decode params according to iniitalizeParams
@@ -91,10 +92,11 @@ func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result 
 		params := initializeParams{}
 		if err := json.Unmarshal(*r.Params, &params); err != nil {
 			// If unmarshaling fails, the params were invalid.
-			log.Printf("Failed to unmarshal params: %v", err)
+			glog.Errorf("Failed to unmarshal params: %v", err)
 			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams, Message: "invalid params"}
 		}
-		log.Printf("conn from %+v", params.ClientInfo)
+		glog.Infof("conn from %+v", params.ClientInfo)
+		glog.Flush()
 
 		go func() {
 			time.Sleep(1 * time.Second)
@@ -132,7 +134,8 @@ func runConn(ctx context.Context, rwc io.ReadWriteCloser) {
 		jsonrpc2.NewBufferedStream(rwc, jsonrpc2.VSCodeObjectCodec{}), // correct codec for mcp?
 		handler)
 	<-conn.DisconnectNotify()
-	log.Println("closed a conn")
+	glog.Info("closed a conn")
+	glog.Flush()
 }
 
 func main() {
@@ -142,9 +145,23 @@ func main() {
 	var rwc io.ReadWriteCloser
 	switch *listenType {
 	case "stdio":
+		/*
+		In the stdio transport:
+		The client launches the MCP server as a subprocess.
+		The server reads JSON-RPC messages from its standard input (stdin) and sends messages to its standard output (stdout).
+		Messages are individual JSON-RPC requests, notifications, or responses.
+		Messages are delimited by newlines, and MUST NOT contain embedded newlines.
+		The server MAY write UTF-8 strings to its standard error (stderr) for logging purposes. Clients MAY capture, forward, or ignore this logging.
+		The server MUST NOT write anything to its stdout that is not a valid MCP message.
+		The client MUST NOT write anything to the server’s stdin that is not a valid MCP message.
+		*/
+		glog.Infof("using stdio rwc")
+		glog.Flush()
 		rwc = stdioReadWriteCloser{}
 		runConn(ctx, rwc)
 	case "http":
+		glog.Infof("using http")
+		glog.Flush()
 		// option1: https://sourcegraph.com/github.com/powerman/rpc-codec/-/blob/jsonrpc2/server.go
 		// does mcp do this? we'd get NewServerCodec() which is an "net/rpc".ServerCodec
 		//rpc.Register(jsonrpc2.HandlerWithError(handle))
@@ -169,9 +186,11 @@ func main() {
 
 		// mcp spec: https://modelcontextprotocol.io/specification/2025-06-18 (schema defined in... ... ...typescript: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/2025-06-18/schema.ts)
 		// but also https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/2025-06-18/schema.json
-		log.Fatal(http.ListenAndServe(*listenAddr, nil))
+		// mcp spec says: If using HTTP, the client MUST include the MCP-Protocol-Version: <protocol-version> HTTP header on all subsequent requests to the MCP server. For details, see the Protocol Version Header section in Transports.
+		glog.Fatal(http.ListenAndServe(*listenAddr, nil))
 	case "sse":
-		log.Fatal("sse not supported yet")
+		glog.Infof("using sse")
+		glog.Fatal("sse not supported yet")
 	}
 
 }
