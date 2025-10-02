@@ -1,0 +1,29 @@
+log_user 0
+set timeout 5
+spawn $env(GOPATH)/bin/minimcp
+send -- "Content-Length: 260\r\n\r\n"
+send -- "{
+  \"jsonrpc\": \"2.0\",
+  \"id\": 1,
+  \"method\": \"initialize\",
+  \"params\": {
+    \"protocolVersion\": \"2024-11-05\",
+    \"capabilities\": {
+      \"roots\": {
+        \"listChanged\": true
+      },
+      \"sampling\": {},
+      \"elicitation\": {}
+    },
+    \"clientInfo\": {
+      \"name\": \"ExampleClient\",
+      \"title\": \"Example Client Display Name\",
+      \"version\": \"1.0.0\"
+    }
+  }
+}\n"
+expect {
+  timeout { puts "timed out waiting for response"; exit 1 }
+  -regexp "id":1,"result":(.*),"jsonrpc":"2.0" { exec ./_test.jq.sh "$expect_out(1,string)" }
+  eof { puts "EOF reached before expected response"; exit 2 }
+}
