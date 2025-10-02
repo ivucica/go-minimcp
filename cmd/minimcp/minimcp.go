@@ -81,6 +81,39 @@ type initializeResult struct { // TODO: really, really should be generated from 
 	Instructions    string               `json:"instructions,omitempty"`
 }
 
+type inputSchema struct {
+	Type        string                  `json:"type"`
+	Properties  map[string]*inputSchema `json:"properties,omitempty"`
+	Description string                  `json:"description,omitempty"`
+	Required    []string                `json:"required,omitempty"`
+}
+
+type tool struct {
+	Name        string       `json:"name"`
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	InputSchema *inputSchema `json:"inputSchema"`
+}
+
+type toolsListResult struct {
+	Tools      []tool `json:"tools"`
+	NextCursor string `json:"nextCursor,omitempty"`
+}
+
+type toolsCallParams struct {
+	Name      string                 `json:"name"`
+	Arguments map[string]interface{} `json:"arguments,omitempty"`
+}
+
+type content struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
+type toolsCallResult struct {
+	Content []*content `json:"content"`
+}
+
 func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result interface{}, err error) {
 	glog.Infof("request: %+v", r)
 	glog.Flush()
@@ -119,6 +152,64 @@ func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result 
 				Version: "0.0.1",
 			},
 		}, nil
+	case "tools/list":
+		// no params, but may be "params": {"cursor": "some-cursor-value"}
+
+		return toolsListResult{
+			Tools: []tool{
+				tool{
+					Name:        "get_weather",
+					Title:       "Weather Information Provider",
+					Description: "Get current weather information for a location.",
+					InputSchema: &inputSchema{
+						Type: "object",
+						Properties: map[string]*inputSchema{
+							"location": &inputSchema{
+								Type:        "string",
+								Description: "City name or zip code",
+							},
+						},
+						Required: []string{"location"},
+					},
+				},
+			},
+		}, nil
+	case "tools/call":
+		params := toolsCallParams{}
+		if err := json.Unmarshal(*r.Params, &params); err != nil {
+			// If unmarshaling fails, the params were invalid.
+			glog.Errorf("Failed to unmarshal params: %v", err)
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams, Message: "invalid params"}
+		}
+		glog.Info("tool call %+v", params)
+		glog.Flush()
+
+		if params.Name != "get_weather" {
+			// TODO: return a response with isError = true
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams, Message: "unknown tool " + params.Name}
+		}
+
+		location, ok := params.Arguments["location"]
+		if !ok {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams, Message: "no location passed"}
+		}
+		locationS := location.(string)
+		if !ok {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams, Message: "location not a string"}
+		}
+		if locationS == "" {
+			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams, Message: "location is empty"}
+		}
+
+		return toolsCallResult{
+			Content: []*content{
+				&content{
+					Type: "text",
+					Text: "Current weather in " + locationS + ":\nTemperature: 72°F\nConditions: Partly cloudy",
+				},
+			},
+		}, nil
+
 	default:
 		//return struct{ A string }{A: "abc"}, nil
 		return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeMethodNotFound, Message: "method not found"}
