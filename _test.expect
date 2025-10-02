@@ -1,8 +1,9 @@
-log_user 0
+log_user 1
 set timeout 5
+set stty_init raw
 spawn $env(GOPATH)/bin/minimcp
-send -- "Content-Length: 260\r\n\r\n"
-send -- "{
+
+set REQ "{
   \"jsonrpc\": \"2.0\",
   \"id\": 1,
   \"method\": \"initialize\",
@@ -21,9 +22,17 @@ send -- "{
       \"version\": \"1.0.0\"
     }
   }
-}\n"
+}"
+
+set SZ [string length $REQ]
+
+send -raw -- "Content-Length: $SZ\r\n\r\n"
+send -raw -- "$REQ"
+
 expect {
   timeout { puts "timed out waiting for response"; exit 1 }
-  -regexp "id":1,"result":(.*),"jsonrpc":"2.0" { exec ./_test.jq.sh "$expect_out(1,string)" }
+  -regexp "{\"id\":1,\"result\":(.*),\"jsonrpc\":\"2.0\"}" {
+    exec ./_test_jq.sh "$expect_out(1,string)"
+  }
   eof { puts "EOF reached before expected response"; exit 2 }
 }
