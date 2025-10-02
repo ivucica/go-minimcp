@@ -6,6 +6,9 @@ LC_ALL=C  # allows use of ${#REQ} to get number of bytes
 # printf %s "${array[@]}" | wc -c
 # and other tricks: https://unix.stackexchange.com/a/702009/11829
 
+# TODO: must be one line in mcp, no content-length.
+# TODO: response must be one line too
+
 REQ=$(cat << _EOF
 {
   "jsonrpc": "2.0",

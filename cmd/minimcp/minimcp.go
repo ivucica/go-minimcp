@@ -131,7 +131,7 @@ func runConn(ctx context.Context, rwc io.ReadWriteCloser) {
 	// conn := jsonrpc2.NewConn(ctx, jsonrpc2.NewPlainObjectStream(os.Stdio
 	conn := jsonrpc2.NewConn(
 		ctx,
-		jsonrpc2.NewBufferedStream(rwc, jsonrpc2.VSCodeObjectCodec{}), // correct codec for mcp?
+		jsonrpc2.NewBufferedStream(rwc, jsonrpc2.PlainObjectCodec{}), // jsonrpc2.VSCodeObjectCodec{}), // correct codec for mcp? maybe not due to Content-Length being sent? n.b. for PlainObjectCodec "Deprecated: use NewPlainObjectStream"
 		handler)
 	<-conn.DisconnectNotify()
 	glog.Info("closed a conn")
