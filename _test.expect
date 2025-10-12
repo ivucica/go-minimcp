@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/expect
 log_user 1
 set timeout 5
 set stty_init raw ; # Required for \r\n to work correctly for Content-Length.
