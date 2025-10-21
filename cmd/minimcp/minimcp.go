@@ -7,8 +7,8 @@ import (
 
 	"context"
 	"encoding/json"
-	"fmt"
 	"flag"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -21,7 +21,7 @@ import (
 var (
 	listenType = flag.String("listen_type", "stdio", "listen on stdio, or http, or sse")
 	listenAddr = flag.String("listen_addr", ":15974", "listen on addr+port")
-	urlBase   = flag.String("url_base", "", "base URL for HTTP/SSE endpoints, without trailing slash; empty defaults to http://${listen_addr}; if listen_addr has no host, os.Hostname() is assumed; intended only for constructing returned endpoint (i.e. does not change handlers, incl. stripping prefixes, for now)")
+	urlBase    = flag.String("url_base", "", "base URL for HTTP/SSE endpoints, without trailing slash; empty defaults to http://${listen_addr}; if listen_addr has no host, os.Hostname() is assumed; intended only for constructing returned endpoint (i.e. does not change handlers, incl. stripping prefixes, for now)")
 )
 
 func init() {
@@ -192,11 +192,11 @@ func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result 
 	}
 
 	// helper to send notification via sseChannel if available, else via c.Notify
-	// handleCtx := ctx // capture for use in notify might allow attempting to skip send of notification if request is done, but this is a trap: 
+	// handleCtx := ctx // capture for use in notify might allow attempting to skip send of notification if request is done, but this is a trap:
 	// it might be an HTTP POST ctx, which will almost certainly be done by the time a delayed async notification ise sent.
 	//
 	// Do not fall for this.
-    notify := func(ctx context.Context, n notification) {
+	notify := func(ctx context.Context, n notification) {
 		// main reply is also sent to sseChannel, but that's done in main POST handler
 		sseChannel := sseChannelFromContext(ctx)
 
@@ -239,11 +239,10 @@ func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result 
 				//close(sseChannel)
 				// Note! THIS MIGHT NOT BE CLOSURE OF THE SESSION. DO NOT CLOSE.
 				// ctx MIGHT be unrelated to the session.
-				// TODO: pass session instead so its SendNotification can be used! 
+				// TODO: pass session instead so its SendNotification can be used!
 				return
 			case sseChannel <- n: // dispatched into sseChannel queue
 			}
-			
 
 			return
 		} else if c != nil {
@@ -300,7 +299,7 @@ func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result 
 		glog.Flush()
 
 		go func(sseChannel chan notification) {
-			time.Sleep(1 * time.Second)	
+			time.Sleep(1 * time.Second)
 			// TODO: ctx might be invalid, c might be unusable...
 			ctx := context.TODO() // add a time block ... we do need to attach the sseChannel from the original ctx if any
 			ctx = contextWithSSEChannel(ctx, sseChannel)
@@ -418,7 +417,7 @@ func runConn(ctx context.Context, rwc io.ReadWriteCloser) {
 	glog.Flush()
 }
 
-type httpPlusSSESession struct{
+type httpPlusSSESession struct {
 	id         string
 	sseChannel chan notification
 	createdAt  time.Time
@@ -442,16 +441,16 @@ func (h *httpPlusSSESession) SendNotification(n notification) error {
 }
 
 // these cannot be replied to directly; they are for internal session management
-type httpPlusSSEHandlerMgrMessage struct{
+type httpPlusSSEHandlerMgrMessage struct {
 	action    string // "register", "unregister", "cleanup", "quit"
 	sessionID string
 	session   *httpPlusSSESession // only for "register"
 }
 
-type httpPlusSSEHandler struct{
+type httpPlusSSEHandler struct {
 	sessions map[string]*httpPlusSSESession
-	mux 	 *http.ServeMux
-	mgrChan chan httpPlusSSEHandlerMgrMessage
+	mux      *http.ServeMux
+	mgrChan  chan httpPlusSSEHandlerMgrMessage
 }
 
 func (h *httpPlusSSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -504,7 +503,7 @@ func (h *httpPlusSSEHandler) unregisterSessionInternal(sessionID string) {
 	if !ok {
 		return
 	}
-	
+
 	glog.Infof("unregistering session %s", sessionID)
 	close(session.sseChannel)
 	session.sseChannel = nil
@@ -581,7 +580,7 @@ func (h *httpPlusSSEHandler) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	// Register a new session. 
+	// Register a new session.
 	session, err := h.registerSession(w, r)
 	if err != nil {
 		http.Error(w, "Failed to register session", http.StatusInternalServerError)
@@ -643,18 +642,18 @@ func (h *httpPlusSSEHandler) handleSSE(w http.ResponseWriter, r *http.Request) {
 			// be done first.
 			var data []byte
 			switch n.Data.(type) {
-				case string:
-					data = []byte(n.Data.(string))
-				case []byte:
-					data = n.Data.([]byte)
-				default:
-					var err error
-					data, err = json.Marshal(n.Data)
-					if err != nil {
-						glog.Errorf("failed to marshal notification data: %v", err)
-						glog.Flush()
-						continue
-					}
+			case string:
+				data = []byte(n.Data.(string))
+			case []byte:
+				data = n.Data.([]byte)
+			default:
+				var err error
+				data, err = json.Marshal(n.Data)
+				if err != nil {
+					glog.Errorf("failed to marshal notification data: %v", err)
+					glog.Flush()
+					continue
+				}
 			}
 			// Write SSE event.
 			_, err = w.Write([]byte("event: " + n.Event + "\n"))
@@ -777,12 +776,12 @@ func (h *httpPlusSSEHandler) handleMessages(w http.ResponseWriter, r *http.Reque
 	rwc := &singleRequestReadWriteCloser{}
 
 	/*
-	conn := jsonrpc2.NewConn(
-		ctx,
-		jsonrpc2.NewBufferedStream(rwc, jsonrpc2.PlainObjectCodec{}),
-		jsonrpc2.HandlerWithError(handle),
-	)
-		*/
+		conn := jsonrpc2.NewConn(
+			ctx,
+			jsonrpc2.NewBufferedStream(rwc, jsonrpc2.PlainObjectCodec{}),
+			jsonrpc2.HandlerWithError(handle),
+		)
+	*/
 
 	// Decode the incoming message as a JSON-RPC request.
 	/*var req jsonrpc2.Request
@@ -802,16 +801,16 @@ func (h *httpPlusSSEHandler) handleMessages(w http.ResponseWriter, r *http.Reque
 	ctxT, cancel := context.WithDeadline(ctx, time.Now().Add(30*time.Second))
 	defer cancel()
 	runConn(ctxT, rwc) // TODO: this does not handle errors
-/*
-	// Handle the request.
-	_, err = handle(ctx, conn, &req)
-	if err != nil {
-		http.Error(w, "Failed to handle JSON-RPC request", http.StatusInternalServerError)
-		glog.Errorf("failed to handle JSON-RPC request for session %s: %v", sessionID, err)
-		glog.Flush()
-		return
-	}
-*/
+	/*
+		// Handle the request.
+		_, err = handle(ctx, conn, &req)
+		if err != nil {
+			http.Error(w, "Failed to handle JSON-RPC request", http.StatusInternalServerError)
+			glog.Errorf("failed to handle JSON-RPC request for session %s: %v", sessionID, err)
+			glog.Flush()
+			return
+		}
+	*/
 	// Get the response data from rwc.
 	responseData := rwc.GetResponseData()
 
@@ -826,7 +825,7 @@ func (h *httpPlusSSEHandler) handleMessages(w http.ResponseWriter, r *http.Reque
 		return
 	}*/
 
-	if responseData == nil {	
+	if responseData == nil {
 		http.Error(w, "Accepted (but no response", http.StatusAccepted)
 		return
 	}
@@ -838,7 +837,7 @@ func (h *httpPlusSSEHandler) handleMessages(w http.ResponseWriter, r *http.Reque
 
 	// Send the response data as a notification over the session's SSE channel.
 	session.SendNotification(notification{
-		Event: "message", // line 175 in sse.py
+		Event: "message",    // line 175 in sse.py
 		Data:  responseData, // probably JSON-RPC envelope, not just the response, so send it as-is
 	})
 	http.Error(w, "Accepted", http.StatusAccepted)
@@ -859,7 +858,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "MiniMCP starting with listen_type=%s, listen_addr=%s, url_base=%s\n", *listenType, *listenAddr, *urlBase)
 	// ensure glog logs are flushed on exit
 	defer glog.Flush()
-	
+
 	// main context
 	ctx := context.Background()
 
@@ -916,14 +915,14 @@ func main() {
 		// spec just says "use sse for server messages" (presumably
 		// notifications only) and "use POST for clients to transmit messages"
 		// (and presumably respond). there's no spec of actual endpoints to use;
-		// official python SDK seems to suggest POST /messages/ and GET /sse 
+		// official python SDK seems to suggest POST /messages/ and GET /sse
 		// respectively, but on the client side it is unclear how to configure
 		// this.
 		//
 		// actual behavior seems to be:
 		// - client does GET /sse with "Accept: text/event-stream" to receive
 		//   notifications
-		// - client receives 'event: endpoint' + newline + 
+		// - client receives 'event: endpoint' + newline +
 		//   'data: /sse/message?sessionId=...' + newline, or similar.
 		// - client starts using POST to that endpoint to send messages
 		// and this seems to match the python SDK behavior.
