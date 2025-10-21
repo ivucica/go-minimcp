@@ -216,6 +216,9 @@ func handle(ctx context.Context, c *jsonrpc2.Conn, r *jsonrpc2.Request) (result 
 	}
 }
 
+// Runs a JSON-RPC 2.0 connection over the provided ReadWriteCloser.
+//
+// Mainly for stdio transport.
 func runConn(ctx context.Context, rwc io.ReadWriteCloser) {
 	handler := jsonrpc2.HandlerWithError(handle) // s.Handle
 
@@ -280,8 +283,40 @@ func main() {
 		// mcp spec says: If using HTTP, the client MUST include the MCP-Protocol-Version: <protocol-version> HTTP header on all subsequent requests to the MCP server. For details, see the Protocol Version Header section in Transports.
 		glog.Fatal(http.ListenAndServe(*listenAddr, nil))
 	case "sse":
+		// old deprecated http+sse method. see:
+		// https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse
+		//
+		// spec just says "use sse for server messages" (presumably
+		// notifications only) and "use POST for clients to transmit messages"
+		// (and presumably respond). there's no spec of actual endpoints to use;
+		// official python SDK seems to suggest POST /messages/ and GET /sse 
+		// respectively, but on the client side it is unclear how to configure
+		// this.
+		//
+		// actual behavior seems to be:
+		// - client does GET /sse with "Accept: text/event-stream" to receive
+		//   notifications
+		// - client receives 'event: endpoint' + newline + 
+		//   'data: /sse/message?sessionId=...' + newline, or similar.
+		// - client starts using POST to that endpoint to send messages
+		// and this seems to match the python SDK behavior.
+		//
+		// see:
+		// https://github.com/modelcontextprotocol/python-sdk/blob/4fee123e72f3e01d01e2fb31282eb206e8cee308/src/mcp/server/sse.py
+		// where the creation of session URL is on line 161, and the endpoint is
+		// indeed the first transmitted message / notification before any other.
+
 		glog.Infof("using sse")
-		glog.Fatal("sse not supported yet")
+		glog.Flush()
+		glog.Infof("url_base: %s (does not affect /sse and /messages/ handlers)", *urlBase)
+		glog.Flush()
+		sseHandler := newHTTPPlusSSEHandler()
+		go sseHandler.loopSessionManagement()
+		glog.Fatal(http.ListenAndServe(*listenAddr, sseHandler))
+	default:
+		glog.Errorf("unknown listen_type: %s", *listenType)
+		glog.Flush()
+		return
 	}
 
 }
